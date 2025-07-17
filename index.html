@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Fitness Chatbot 💪</title>
+  <link rel="stylesheet" href="/Health-and-Fitness-Chatbot/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+  <!-- Google Translate -->
+  <script type="text/javascript">
+    function googleTranslateElementInit() {
+      new google.translate.TranslateElement({
+        pageLanguage: 'en',
+        includedLanguages: 'en,hi,gu',
+        layout: google.translate.TranslateElement.InlineLayout.SIMPLE
+      }, 'google_translate_element');
+    }
+  </script>
+  <script src="https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
+</head>
+
+<body>
+  <div class="chat-container">
+    <div class="chat-header">
+      💬 Health and Fitness Bot
+    </div>
+
+    <!-- TTS & Language Toggle -->
+    <div class="toggle-container">
+      <div style="display: flex; align-items: center;">
+        <label class="switch">
+          <input type="checkbox" id="ttsToggle" />
+          <span class="slider round"></span>
+        </label>
+        <span class="toggle-label">🔊 TTS</span>
+      </div>
+
+      <div id="google_translate_element"></div>
+    </div>
+
+    <!-- Chat Messages -->
+    <div class="chat-box" id="chat-box">
+      <div class="chat-message bot">Hi! You can ask me anything about health or fitness. 🏋️‍♀️</div>
+    </div>
+
+    <!-- Chat Input -->
+    <div class="chat-input">
+      <input type="text" id="message-input" placeholder="Type your message..." required />
+      <button id="send-btn">Send</button>
+    </div>
+  </div>
+
+  <!-- JS Logic -->
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const chatBox = document.getElementById("chat-box");
+      const messageInput = document.getElementById("message-input");
+      const sendBtn = document.getElementById("send-btn");
+      const ttsToggle = document.getElementById("ttsToggle");
+      const ttsToggleContainer = document.querySelector(".toggle-container > div");
+
+      function getSelectedLang() {
+        const combo = document.querySelector(".goog-te-combo");
+        return combo?.value || "en";
+      }
+
+      function updateTTSToggleVisibility() {
+        const lang = getSelectedLang();
+        if (lang !== "en") {
+          ttsToggleContainer.style.display = "none";
+        } else {
+          ttsToggleContainer.style.display = "flex";
+        }
+      }
+
+      function waitForTranslateDropdown() {
+        const observer = new MutationObserver(() => {
+          const dropdown = document.querySelector(".goog-te-combo");
+          if (dropdown) {
+            dropdown.addEventListener("change", () => {
+              setTimeout(updateTTSToggleVisibility, 200);
+            });
+            updateTTSToggleVisibility(); // call once immediately
+            observer.disconnect(); // no longer need to observe
+          }
+        });
+
+        observer.observe(document.body, {
+          childList: true,
+          subtree: true,
+        });
+      }
+
+      waitForTranslateDropdown();
+
+      function getTTSLangCode(lang) {
+        const map = {
+          en: "en-US",
+          hi: "hi-IN",
+          gu: "gu-IN"
+        };
+        return map[lang] || "en-US";
+      }
+
+      function cleanTextForTTS(text) {
+        return text
+          .replace(/\*\*(.*?)\*\*/g, '$1')
+          .replace(/\*(.*?)\*/g, '$1')
+          .replace(/#+\s?/g, '')
+          .replace(/[_*~`]/g, '')
+          .replace(/:[^:\s]*(?:::[^:\s]*)*:/g, '')
+          .replace(/[\u{1F600}-\u{1F6FF}]/gu, '')
+          .replace(/[^\p{L}\p{N}\p{P}\p{Z}^$\n]/gu, '')
+          .trim();
+      }
+
+      function speakWithTTS(text) {
+        const cleaned = cleanTextForTTS(text);
+        const langCode = getTTSLangCode(getSelectedLang());
+        const utterance = new SpeechSynthesisUtterance(cleaned);
+        utterance.lang = langCode;
+
+        const voices = speechSynthesis.getVoices();
+        const matchedVoice = voices.find(v => v.lang === langCode);
+        if (matchedVoice) utterance.voice = matchedVoice;
+
+        speechSynthesis.cancel();
+        speechSynthesis.speak(utterance);
+      }
+
+      function appendMessage(text, isBot = false) {
+        const msg = document.createElement("div");
+        msg.classList.add("chat-message", isBot ? "bot" : "user");
+
+        if (isBot) {
+          msg.innerHTML = marked.parse(text);
+        } else {
+          msg.textContent = text;
+        }
+
+        chatBox.appendChild(msg);
+        chatBox.scrollTop = chatBox.scrollHeight;
+
+        if (isBot && ttsToggle.checked && getSelectedLang() === "en") {
+          speakWithTTS(text);
+        }
+      }
+
+      function sendMessage() {
+        const message = messageInput.value.trim();
+        const selectedLang = getSelectedLang();
+        if (!message) return;
+
+        appendMessage(message, false);
+        messageInput.value = "";
+
+        fetch("/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message, lang: selectedLang })
+        })
+          .then(res => res.json())
+          .then(data => {
+            speechSynthesis.cancel();
+            appendMessage(data.response || "Something went wrong.", true);
+          })
+          .catch(() => {
+            appendMessage("Something went wrong.", true);
+          });
+      }
+
+      sendBtn.addEventListener("click", sendMessage);
+      messageInput.addEventListener("keypress", e => {
+        if (e.key === "Enter") sendMessage();
+      });
+
+      window.speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices();
+    });
+  </script>
+
+</body>
+
+</html>
