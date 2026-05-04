@@ -6,8 +6,10 @@ app = Flask(__name__)
 app.secret_key = "your_secret_key"  # For session storage
 
 # --- Set up Gemini API client ---
+import os
+
 client = genai.Client(
-    api_key="AIzaSyD4APxUZUhzlz_Tdw697wZUqVPr1Y6ojjs"
+    api_key=os.getenv("GEMINI_API_KEY")
 )
 
 model = "gemini-2.5-pro"
