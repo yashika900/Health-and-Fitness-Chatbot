@@ -16,7 +16,7 @@ if not API_KEY:
 client = genai.Client(api_key=API_KEY)
 
 # ✅ Use stable model
-model = "gemini-2.0-flash"
+model = "gemini-2.5-flash"
 
 
 # --- System Prompt ---
