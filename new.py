@@ -1,24 +1,25 @@
 from flask import Flask, request, jsonify, render_template, session
 from google import genai
 from google.genai import types
-
-app = Flask(__name__)
-app.secret_key = "your_secret_key"  # For session storage
-
-# --- Set up Gemini API client ---
 import os
 
-client = genai.Client(
-    api_key=os.getenv("GEMINI_API_KEY")
-)
+app = Flask(__name__)
+app.secret_key = "AIzaSyCPX-upDAynjSDheMQyuMuvEHkCVqL_QlM"
 
-model = "gemini-2.5-pro"
+# --- Load API Key safely ---
+API_KEY = os.getenv("GEMINI_API_KEY")
 
-generate_content_config = types.GenerateContentConfig(
-    thinking_config=types.ThinkingConfig(thinking_budget=-1)
-)
+if not API_KEY:
+    raise ValueError("❌ GEMINI_API_KEY not set in environment variables")
 
-# --- System Prompt: Fitness Expert Role with Precision ---
+# --- Set up Gemini client ---
+client = genai.Client(api_key=API_KEY)
+
+# ✅ Use stable model
+model = "gemini-1.5-flash"
+
+
+# --- System Prompt ---
 system_instruction = types.Content(
     role="user",
     parts=[
@@ -35,9 +36,11 @@ system_instruction = types.Content(
     ]
 )
 
+
 @app.route("/", methods=["GET"])
 def home():
     return render_template("index.html", chat=session.get("chat_history", []))
+
 
 @app.route("/chat", methods=["POST"])
 def chat():
@@ -50,23 +53,21 @@ def chat():
     if "chat_history" not in session:
         session["chat_history"] = []
 
-    # Prepare the input for model (system + latest user prompt only)
     request_history = [
         system_instruction,
         types.Content(role="user", parts=[types.Part(text=user_input)])
     ]
 
     try:
-        full_response = ""
-        for chunk in client.models.generate_content_stream(
+        # ✅ Use NON-streaming (more stable on deployment)
+        response = client.models.generate_content(
             model=model,
-            contents=request_history,
-            config=generate_content_config
-        ):
-            if chunk.text:
-                full_response += chunk.text
+            contents=request_history
+        )
 
-        # Save full interaction in session history
+        full_response = response.text
+
+        # Save chat
         session["chat_history"].append({"role": "user", "message": user_input})
         session["chat_history"].append({"role": "model", "message": full_response})
         session.modified = True
@@ -74,7 +75,9 @@ def chat():
         return jsonify({"response": full_response})
 
     except Exception as e:
+        print("🔥 ERROR:", str(e))  # shows in Render logs
         return jsonify({"error": str(e)}), 500
+
 
 if __name__ == "__main__":
     app.run(debug=True)
